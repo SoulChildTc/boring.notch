@@ -108,10 +108,13 @@ private struct ScrollMonitor: NSViewRepresentable {
         }
 
         private func handleScroll(_ event: NSEvent) {
-            // Don't capture scroll events over scrollable content (e.g. Scratchpad's
-            // text editor, or any NSScrollView/NSTextView) so that scrolling works
-            // inside those views without collapsing the notch.
-            if let window = monitoredView?.window,
+            // For VERTICAL gestures only: ignore scrolls over scrollable content
+            // (e.g. Scratchpad's text editor) so vertical scrolling works inside
+            // those views without collapsing the notch. Horizontal gestures
+            // (tab switching) are NOT skipped, so left/right swipe works even over
+            // the editor.
+            if !direction.isHorizontal,
+               let window = monitoredView?.window,
                let hitView = window.contentView?.hitTest(event.locationInWindow)
             {
                 var current: NSView? = hitView

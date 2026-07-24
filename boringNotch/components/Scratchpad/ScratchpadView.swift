@@ -234,7 +234,7 @@ private struct ScratchTextEditor: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(tabID: tabID, store: store) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
+        let scrollView = HorizontalPassThroughScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
         scrollView.autohidesScrollers = true
@@ -274,6 +274,20 @@ private struct ScratchTextEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard !isLoading, let tv = notification.object as? NSTextView else { return }
             store.commitContent(tv.string, for: tabID)
+        }
+    }
+}
+
+// Scroll view that keeps vertical scrolling for itself but forwards
+// horizontal-dominant scroll events up the responder chain, so the notch panel's
+// left/right pan monitor (tab switching) receives the real horizontal delta
+// instead of the scroll view consuming it.
+private final class HorizontalPassThroughScrollView: NSScrollView {
+    override func scrollWheel(with event: NSEvent) {
+        if abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) {
+            nextResponder?.scrollWheel(with: event)
+        } else {
+            super.scrollWheel(with: event)
         }
     }
 }
