@@ -48,19 +48,6 @@ struct ScratchpadView: View {
                 }
             }
             .scrollIndicators(.never)
-
-            Button {
-                store.isEnlarged.toggle()
-            } label: {
-                Image(systemName: store.isEnlarged ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.gray)
-                    .frame(width: 22, height: 22)
-                    .background(Color(nsColor: .secondarySystemFill).opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-            .buttonStyle(.plain)
-            .help(store.isEnlarged ? "缩小" : "放大")
         }
         .frame(height: 26)
     }

@@ -16,8 +16,6 @@ final class ScratchpadStore: ObservableObject {
 
     @Published var selectedTabID: ScratchTab.ID?
 
-    @Published var isEnlarged: Bool = false
-
     // Live editing content lives here, NOT in @Published tabs, so keystrokes never
     // trigger objectWillChange (which would rebuild every tab chip on each char).
     // Merged back into `tabs` only when saving.
