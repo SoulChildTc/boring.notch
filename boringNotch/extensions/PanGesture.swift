@@ -60,6 +60,7 @@ private struct ScrollMonitor: NSViewRepresentable {
         private var active = false
             private var endTask: Task<Void, Never>?
         private let noiseThreshold: CGFloat = 0.2
+        private weak var monitoredView: NSView?
 
         init(direction: PanDirection, threshold: CGFloat, action: @escaping (CGFloat, NSEvent.Phase) -> Void) {
             self.direction = direction
@@ -86,6 +87,7 @@ private struct ScrollMonitor: NSViewRepresentable {
 
         func installMonitor(on view: NSView) {
             removeMonitor()
+            monitoredView = view
             monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { [weak self, weak view] event in
                 guard let self = self, event.window === view?.window else { return event }
                 self.handleScroll(event)
@@ -98,6 +100,7 @@ private struct ScrollMonitor: NSViewRepresentable {
                 NSEvent.removeMonitor(monitor)
                 self.monitor = nil
             }
+            monitoredView = nil
             accumulated = 0
             active = false
             endTask?.cancel()
@@ -105,6 +108,21 @@ private struct ScrollMonitor: NSViewRepresentable {
         }
 
         private func handleScroll(_ event: NSEvent) {
+            // Don't capture scroll events over scrollable content (e.g. Scratchpad's
+            // text editor, or any NSScrollView/NSTextView) so that scrolling works
+            // inside those views without collapsing the notch.
+            if let window = monitoredView?.window,
+               let hitView = window.contentView?.hitTest(event.locationInWindow)
+            {
+                var current: NSView? = hitView
+                while let v = current {
+                    if v is NSScrollView || v is NSTextView {
+                        return
+                    }
+                    current = v.superview
+                }
+            }
+
             if event.phase == .ended || event.momentumPhase == .ended {
                 if active {
                     action(accumulated.magnitude, .ended)

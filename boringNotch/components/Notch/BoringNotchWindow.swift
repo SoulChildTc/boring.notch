@@ -41,10 +41,10 @@ class BoringNotchWindow: NSPanel {
     }
     
     override var canBecomeKey: Bool {
-        false
+        MainActor.assumeIsolated { BoringViewCoordinator.shared.currentView == .scratchpad }
     }
-    
+
     override var canBecomeMain: Bool {
-        false
+        MainActor.assumeIsolated { BoringViewCoordinator.shared.currentView == .scratchpad }
     }
 }

@@ -31,6 +31,8 @@ struct ContentView: View {
 
     @State private var haptics: Bool = false
 
+    @State private var tabSwitchArmed = true
+
     @Namespace var albumArtNamespace
 
     @Default(.useMusicVisualizer) var useMusicVisualizer
@@ -144,6 +146,15 @@ struct ContentView: View {
                         view
                             .panGesture(direction: .up) { translation, phase in
                                 handleUpGesture(translation: translation, phase: phase)
+                            }
+                    }
+                    .conditionalModifier(Defaults[.enableGestures]) { view in
+                        view
+                            .panGesture(direction: .left) { translation, phase in
+                                handleTabSwitchGesture(translation: translation, phase: phase, forward: true)
+                            }
+                            .panGesture(direction: .right) { translation, phase in
+                                handleTabSwitchGesture(translation: translation, phase: phase, forward: false)
                             }
                     }
                     .onReceive(NotificationCenter.default.publisher(for: .sharingDidFinish)) { _ in
@@ -349,6 +360,8 @@ struct ContentView: View {
                         NotchHomeView(albumArtNamespace: albumArtNamespace)
                     case .shelf:
                         ShelfView()
+                    case .scratchpad:
+                        ScratchpadView()
                     }
                 }
                 .transition(
@@ -599,7 +612,7 @@ struct ContentView: View {
             withAnimation(animationSpring) {
                 isHovering = false
             }
-            if !SharingStateManager.shared.preventNotchClose { 
+            if !SharingStateManager.shared.preventNotchClose {
                 gestureProgress = .zero
                 vm.close()
             }
@@ -607,6 +620,30 @@ struct ContentView: View {
             if Defaults[.enableHaptics] {
                 haptics.toggle()
             }
+        }
+    }
+
+    // Two-finger left/right swipe switches between top-level tabs (like switching
+    // macOS desktops). Left = next tab, right = previous. Clamps at both ends.
+    // Fires once per swipe when the threshold is crossed.
+    private func handleTabSwitchGesture(translation: CGFloat, phase: NSEvent.Phase, forward: Bool) {
+        guard vm.notchState == .open else { return }
+
+        if phase == .ended {
+            tabSwitchArmed = true
+            return
+        }
+
+        guard tabSwitchArmed, translation > Defaults[.gestureSensitivity] else { return }
+        tabSwitchArmed = false
+
+        guard let idx = tabs.firstIndex(where: { $0.view == coordinator.currentView }) else { return }
+        let targetIdx = forward ? idx + 1 : idx - 1
+        guard targetIdx >= 0, targetIdx < tabs.count else { return }
+
+        if Defaults[.enableHaptics] { haptics.toggle() }
+        withAnimation(.smooth) {
+            coordinator.currentView = tabs[targetIdx].view
         }
     }
 }
