@@ -2802,6 +2802,9 @@
         }
       }
     },
+    "Auto" : {
+
+    },
     "Auto-scroll to next event" : {
       "localizations" : {
         "ar" : {
@@ -12309,6 +12312,12 @@
         }
       }
     },
+    "LRCLIB" : {
+
+    },
+    "Lyrics source" : {
+
+    },
     "Made with 🫶🏻 by not so boring not.people" : {
       "localizations" : {
         "ar" : {
@@ -14408,6 +14417,9 @@
           }
         }
       }
+    },
+    "NetEase Music" : {
+
     },
     "Never hide" : {
       "localizations" : {
@@ -16509,6 +16521,9 @@
           }
         }
       }
+    },
+    "QQ Music" : {
+
     },
     "Quick Share" : {
       "localizations" : {

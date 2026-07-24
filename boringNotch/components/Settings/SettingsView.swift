@@ -600,6 +600,7 @@ struct Media: View {
     @Default(.sneakPeekStyles) var sneakPeekStyles
 
     @Default(.enableLyrics) var enableLyrics
+    @Default(.lyricsSource) var lyricsSource
 
     var body: some View {
         Form {
@@ -683,6 +684,14 @@ struct Media: View {
                     HStack {
                         Text("Show lyrics below artist name")
                         customBadge(text: "Beta")
+                    }
+                }
+                if enableLyrics {
+                    Picker("Lyrics source", selection: $lyricsSource) {
+                        Text("Auto").tag(LyricsSource.auto)
+                        Text("NetEase Music").tag(LyricsSource.netease)
+                        Text("QQ Music").tag(LyricsSource.qqMusic)
+                        Text("LRCLIB").tag(LyricsSource.lrclib)
                     }
                 }
             } header: {

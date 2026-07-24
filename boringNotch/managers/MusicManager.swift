@@ -14,6 +14,13 @@ let defaultImage: NSImage = .init(
     accessibilityDescription: "Album Art"
 )!
 
+struct SongCandidate {
+    let id: String
+    let name: String
+    let artist: String
+    let duration: TimeInterval
+}
+
 class MusicManager: ObservableObject {
     // MARK: - Properties
     static let shared = MusicManager()
@@ -355,7 +362,7 @@ class MusicManager: ObservableObject {
             Task { @MainActor in
                 let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music")
                 guard !runningApps.isEmpty else {
-                    await self.fetchLyricsFromWeb(title: title, artist: artist)
+                    await self.fetchLyricsBySource(bundleIdentifier: bundleIdentifier, title: title, artist: artist)
                     return
                 }
 
@@ -393,13 +400,35 @@ class MusicManager: ObservableObject {
                 } catch {
                     // fall through to web lookup
                 }
-                await self.fetchLyricsFromWeb(title: title, artist: artist)
+                await self.fetchLyricsBySource(bundleIdentifier: bundleIdentifier, title: title, artist: artist)
             }
         } else {
             Task { @MainActor in
                 self.isFetchingLyrics = true
                 self.currentLyrics = ""
-                await self.fetchLyricsFromWeb(title: title, artist: artist)
+                await self.fetchLyricsBySource(bundleIdentifier: bundleIdentifier ?? "", title: title, artist: artist)
+            }
+        }
+    }
+
+    @MainActor
+    private func fetchLyricsBySource(bundleIdentifier: String, title: String, artist: String) async {
+        let source = Defaults[.lyricsSource]
+        switch source {
+        case .netease:
+            await fetchLyricsFromNetease(title: title, artist: artist)
+        case .qqMusic:
+            await fetchLyricsFromQQMusic(title: title, artist: artist)
+        case .lrclib:
+            await fetchLyricsFromWeb(title: title, artist: artist)
+        case .auto:
+            switch bundleIdentifier {
+            case "com.netease.cloudmusic", "com.netease.163music":
+                await fetchLyricsFromNetease(title: title, artist: artist)
+            case "com.tencent.QQMusicMac":
+                await fetchLyricsFromQQMusic(title: title, artist: artist)
+            default:
+                await fetchLyricsFromWeb(title: title, artist: artist)
             }
         }
     }
@@ -441,7 +470,7 @@ class MusicManager: ObservableObject {
                 let plain = (first["plainLyrics"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 let synced = (first["syncedLyrics"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 let resolved = plain.isEmpty ? synced : plain
-                self.currentLyrics = resolved
+                self.currentLyrics = self.stripLRC(resolved)
                 self.isFetchingLyrics = false
                 if !synced.isEmpty {
                     self.syncedLyrics = self.parseLRC(synced)
@@ -463,11 +492,10 @@ class MusicManager: ObservableObject {
     // MARK: - Synced lyrics helpers
     private func parseLRC(_ lrc: String) -> [(time: Double, text: String)] {
         var result: [(Double, String)] = []
+        let pattern = #"\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?(?:-\d+)?\]"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         lrc.split(separator: "\n").forEach { lineSub in
             let line = String(lineSub)
-            // Match [mm:ss.xx] or [m:ss]
-            let pattern = #"\[(\d{1,2}):(\d{2})(?:\.(\d{1,2}))?\]"#
-            guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
             let nsLine = line as NSString
             if let match = regex.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) {
                 let minStr = nsLine.substring(with: match.range(at: 1))
@@ -477,7 +505,8 @@ class MusicManager: ObservableObject {
                 let minutes = Double(minStr) ?? 0
                 let seconds = Double(secStr) ?? 0
                 let centis = Double(centiStr) ?? 0
-                let time = minutes * 60 + seconds + centis / 100.0
+                let divisor: Double = centiStr.count == 3 ? 1000.0 : 100.0
+                let time = minutes * 60 + seconds + centis / divisor
                 let textStart = match.range.location + match.range.length
                 let text = nsLine.substring(from: textStart).trimmingCharacters(in: .whitespaces)
                 if !text.isEmpty {
@@ -486,6 +515,195 @@ class MusicManager: ObservableObject {
             }
         }
         return result.sorted { $0.0 < $1.0 }
+    }
+
+    private func stripLRC(_ lrc: String) -> String {
+        let pattern = #"\[\d{1,2}:\d{2}(?:\.\d{1,3})?(?:-\d+)?\]"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return lrc }
+        let nsStr = lrc as NSString
+        let range = NSRange(location: 0, length: nsStr.length)
+        let stripped = regex.stringByReplacingMatches(in: lrc, range: range, withTemplate: "")
+        return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - Song matching
+    private func matchSong(candidates: [SongCandidate], targetTitle: String, targetArtist: String, targetDuration: TimeInterval) -> SongCandidate? {
+        let filtered = candidates.filter { abs($0.duration - targetDuration) <= 3 }
+        guard !filtered.isEmpty else {
+            return candidates.first
+        }
+        let targetArtistLower = targetArtist.lowercased().trimmingCharacters(in: .whitespaces)
+        let scored = filtered.map { candidate -> (SongCandidate, Int) in
+            let ca = candidate.artist.lowercased().trimmingCharacters(in: .whitespaces)
+            if ca == targetArtistLower {
+                return (candidate, 3)
+            }
+            if ca.contains(targetArtistLower) || targetArtistLower.contains(ca) {
+                return (candidate, 2)
+            }
+            if ca.hasPrefix(targetArtistLower.prefix(3)) || targetArtistLower.hasPrefix(ca.prefix(3)) {
+                return (candidate, 1)
+            }
+            return (candidate, 0)
+        }
+        return scored.max { $0.1 < $1.1 }?.0 ?? candidates.first
+    }
+
+    @MainActor
+    private func fetchLyricsFromNetease(title: String, artist: String) async {
+        let cleanTitle = normalizedQuery(title)
+        let cleanArtist = normalizedQuery(artist)
+        let query = "\(cleanTitle) \(cleanArtist)"
+        guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            self.currentLyrics = ""
+            self.isFetchingLyrics = false
+            return
+        }
+
+        let searchURL = "https://music.163.com/api/search/get/web?s=\(encodedQuery)&limit=5&offset=0&type=1"
+        guard let url = URL(string: searchURL) else {
+            self.currentLyrics = ""
+            self.isFetchingLyrics = false
+            return
+        }
+
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let result = json["result"] as? [String: Any],
+                  let songs = result["songs"] as? [[String: Any]] else {
+                self.currentLyrics = ""
+                self.isFetchingLyrics = false
+                return
+            }
+
+            let candidates: [SongCandidate] = songs.compactMap { song in
+                guard let songId = song["id"] as? Int,
+                      let songName = song["name"] as? String,
+                      let artists = song["artists"] as? [[String: Any]],
+                      let firstArtist = artists.first?["name"] as? String,
+                      let duration = song["duration"] as? TimeInterval else { return nil }
+                return SongCandidate(id: "\(songId)", name: songName, artist: firstArtist, duration: duration / 1000.0)
+            }
+
+            guard !candidates.isEmpty else {
+                self.currentLyrics = ""
+                self.isFetchingLyrics = false
+                return
+            }
+
+            let best = matchSong(candidates: candidates, targetTitle: cleanTitle, targetArtist: cleanArtist, targetDuration: self.songDuration)
+            guard let songId = best?.id else {
+                self.currentLyrics = ""
+                self.isFetchingLyrics = false
+                return
+            }
+
+            let lyricURL = "https://music.163.com/api/song/lyric?id=\(songId)&lv=-1&kv=-1&tv=-1"
+            guard let lyricUrl = URL(string: lyricURL) else {
+                self.currentLyrics = ""
+                self.isFetchingLyrics = false
+                return
+            }
+
+            let (lyricData, _) = try await URLSession.shared.data(from: lyricUrl)
+            guard let lyricJson = try JSONSerialization.jsonObject(with: lyricData) as? [String: Any],
+                  let lrc = lyricJson["lrc"] as? [String: Any],
+                  let lyricStr = lrc["lyric"] as? String else {
+                self.currentLyrics = ""
+                self.isFetchingLyrics = false
+                return
+            }
+
+            self.currentLyrics = self.stripLRC(lyricStr)
+            self.isFetchingLyrics = false
+            self.syncedLyrics = self.parseLRC(lyricStr)
+        } catch {
+            self.currentLyrics = ""
+            self.isFetchingLyrics = false
+            self.syncedLyrics = []
+        }
+    }
+
+    @MainActor
+    private func fetchLyricsFromQQMusic(title: String, artist: String) async {
+        let cleanTitle = normalizedQuery(title)
+        let cleanArtist = normalizedQuery(artist)
+        let query = "\(cleanTitle) \(cleanArtist)"
+        guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            self.currentLyrics = ""
+            self.isFetchingLyrics = false
+            return
+        }
+
+        let searchURL = "https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w=\(encodedQuery)&format=json&n=5&t=0"
+        guard let url = URL(string: searchURL) else {
+            self.currentLyrics = ""
+            self.isFetchingLyrics = false
+            return
+        }
+
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let dataObj = json["data"] as? [String: Any],
+                  let song = dataObj["song"] as? [String: Any],
+                  let list = song["list"] as? [[String: Any]] else {
+                self.currentLyrics = ""
+                self.isFetchingLyrics = false
+                return
+            }
+
+            let candidates: [SongCandidate] = list.compactMap { item in
+                guard let songmid = item["songmid"] as? String,
+                      let songName = item["songname"] as? String,
+                      let singers = item["singer"] as? [[String: Any]],
+                      let firstSinger = singers.first?["name"] as? String,
+                      let interval = item["interval"] as? TimeInterval else { return nil }
+                return SongCandidate(id: songmid, name: songName, artist: firstSinger, duration: interval)
+            }
+
+            guard !candidates.isEmpty else {
+                self.currentLyrics = ""
+                self.isFetchingLyrics = false
+                return
+            }
+
+            let best = matchSong(candidates: candidates, targetTitle: cleanTitle, targetArtist: cleanArtist, targetDuration: self.songDuration)
+            guard let songmid = best?.id else {
+                self.currentLyrics = ""
+                self.isFetchingLyrics = false
+                return
+            }
+
+            let lyricURL = "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=\(songmid)&g_tk=0&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0"
+            guard let lyricUrl = URL(string: lyricURL) else {
+                self.currentLyrics = ""
+                self.isFetchingLyrics = false
+                return
+            }
+
+            var request = URLRequest(url: lyricUrl)
+            request.setValue("https://y.qq.com", forHTTPHeaderField: "Referer")
+
+            let (lyricData, _) = try await URLSession.shared.data(for: request)
+            guard let lyricJson = try JSONSerialization.jsonObject(with: lyricData) as? [String: Any],
+                  let lyricStr = lyricJson["lyric"] as? String,
+                  let decodedData = Data(base64Encoded: lyricStr),
+                  let decodedStr = String(data: decodedData, encoding: .utf8) else {
+                self.currentLyrics = ""
+                self.isFetchingLyrics = false
+                return
+            }
+
+            self.currentLyrics = self.stripLRC(decodedStr)
+            self.isFetchingLyrics = false
+            self.syncedLyrics = self.parseLRC(decodedStr)
+        } catch {
+            self.currentLyrics = ""
+            self.isFetchingLyrics = false
+            self.syncedLyrics = []
+        }
     }
 
     func lyricLine(at elapsed: Double) -> String {

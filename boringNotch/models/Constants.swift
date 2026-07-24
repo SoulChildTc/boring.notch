@@ -25,6 +25,13 @@ struct CustomVisualizer: Codable, Hashable, Equatable, Defaults.Serializable {
     var speed: CGFloat = 1.0
 }
 
+enum LyricsSource: String, CaseIterable, Defaults.Serializable {
+    case auto = "auto"
+    case netease = "netease"
+    case qqMusic = "qqMusic"
+    case lrclib = "lrclib"
+}
+
 enum CalendarSelectionState: Codable, Defaults.Serializable {
     case all
     case selected(Set<String>)
@@ -129,6 +136,7 @@ extension Defaults.Keys {
     static let waitInterval = Key<Double>("waitInterval", default: 3)
     static let showShuffleAndRepeat = Key<Bool>("showShuffleAndRepeat", default: false)
     static let enableLyrics = Key<Bool>("enableLyrics", default: false)
+    static let lyricsSource = Key<LyricsSource>("lyricsSource", default: .auto)
     static let musicControlSlots = Key<[MusicControlButton]>(
         "musicControlSlots",
         default: MusicControlButton.defaultLayout
