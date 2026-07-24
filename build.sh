@@ -30,3 +30,4 @@ rm -f "$ZIP_PATH"
 ditto -c -k --keepParent "$APP" "$ZIP_PATH"
 
 echo "==> Done! $ZIP_PATH"
+open .output

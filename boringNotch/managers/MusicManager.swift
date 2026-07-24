@@ -262,6 +262,15 @@ class MusicManager: ObservableObject {
             }
 
             // Fetch lyrics on content change
+            if state.title != self.songTitle {
+                self.songTitle = state.title
+            }
+            if state.artist != self.artistName {
+                self.artistName = state.artist
+            }
+            if state.duration != self.songDuration {
+                self.songDuration = state.duration
+            }
             lyricsLog("Song changed: title=\(state.title) artist=\(state.artist) duration=\(state.duration)s currentSongDuration=\(self.songDuration)s")
             self.fetchLyricsIfAvailable(bundleIdentifier: state.bundleIdentifier, title: state.title, artist: state.artist)
         }
@@ -642,6 +651,7 @@ class MusicManager: ObservableObject {
             guard let lyricJson = try JSONSerialization.jsonObject(with: lyricData) as? [String: Any],
                   let lrc = lyricJson["lrc"] as? [String: Any],
                   let lyricStr = lrc["lyric"] as? String else {
+                lyricsLog("NetEase lyrics API: no lyric field in response for song \(songId)")
                 self.currentLyrics = ""
                 self.isFetchingLyrics = false
                 return
@@ -650,6 +660,11 @@ class MusicManager: ObservableObject {
             self.currentLyrics = self.stripLRC(lyricStr)
             self.isFetchingLyrics = false
             self.syncedLyrics = self.parseLRC(lyricStr)
+            if self.syncedLyrics.isEmpty {
+                lyricsLog("NetEase lyrics: no synced lines, stripped length=\(self.currentLyrics.count) content=\"\(self.currentLyrics.prefix(100))\"")
+            } else {
+                lyricsLog("NetEase lyrics: \(self.syncedLyrics.count) synced lines, first=\"\(self.syncedLyrics.first?.text ?? "")\"")
+            }
         } catch {
             self.currentLyrics = ""
             self.isFetchingLyrics = false
