@@ -247,7 +247,7 @@ case .scratchpad:            // ← 新增
 
 ## 第三阶段 — Scratchpad（已完成，功能可用）
 
-**状态**：已实现并验证。核心功能（多 tab、增删、pin、重命名、自动保存、notch 内编辑、滚动、切换特效）均可用。
+**状态**：已实现并验证。核心功能（多 tab、增删、pin、重命名、自动保存、notch 内编辑、滚动、切换特效、双指左右滑切外部 tab）均可用。
 
 ### 已落地文件
 
@@ -262,7 +262,8 @@ case .scratchpad:            // ← 新增
 - `components/Tabs/TabSelectionView.swift`：tabs 数组加 Scratchpad 项
 - `ContentView.swift`：switch 加 `case .scratchpad`
 - `components/Notch/BoringNotchWindow.swift`、`BoringNotchSkyLightWindow.swift`：`canBecomeKey/Main` 改为 `currentView == .scratchpad` 时才 true（否则 notch 面板无法接收键盘输入）
-- `extensions/PanGesture.swift`：`handleScroll` 开头加 hitTest，鼠标落在 `NSScrollView`/`NSTextView` 上时 `return`（否则在编辑区滚动会触发 notch 收起）
+- `extensions/PanGesture.swift`：`handleScroll` 中，**仅纵向手势**在鼠标落于 `NSScrollView`/`NSTextView` 时 `return`（避免编辑区上下滚动收起 notch）；横向手势不跳过（用于左右滑切 tab）
+- `ContentView.swift`：新增 `.panGesture(.left/.right)` + `handleTabSwitchGesture`，双指左右滑切换外部 tab（左=下一个，右=上一个，边界停住，一次滑动只切一次，`tabSwitchArmed` 标志防连跳）
 
 持久化路径（沙箱 app，实际在容器内）：
 `~/Library/Containers/<bundle-id>/Data/Library/Application Support/boringNotch/Scratchpad/tabs.json`
@@ -280,9 +281,12 @@ case .scratchpad:            // ← 新增
 
 5. **切换特效**：tab 条高亮块用 `matchedGeometryEffect` + `withAnimation` 平滑滑动（仿外部 tab）。编辑区因 `.id` remount，未加转场以免叠加重建开销。
 
+6. **编辑区内左右滑切 tab**：编辑器的 scrollView 用 `HorizontalPassThroughScrollView`——横向为主的 scrollWheel 转发给 `nextResponder`（让切 tab 手势拿到真实横向 delta），纵向自己处理。不加这个的话，NSScrollView 会吞掉横向滚动，编辑区上左右滑切不了 tab。
+
 ### 待办 / 已知限制
 
 - **"放大"未实现**：`isEnlarged` 状态与按钮已存在，但未接放大逻辑。原地放大需改 notch 固定窗口尺寸（`boringNotchApp.swift` 窗口创建、`ContentView` L206 maxHeight、`vm.notchSize`、形状/动画），属四处联动深改。
+- **切 tab 跟手动画未做**：当前左右滑是"过阈值瞬间切换 + 淡入"，非 Mac 桌面那种内容随手指实时推移。跟手需接实时 translation 做双页联动位移 + 松手判定，会碰 `ContentView` tab 内容布局并可能与展开/收起动画叠加，暂缓。
 - **界面文案写死中文**：未走 `Localizable.xcstrings`。build 时 Xcode 会自动把中文字面量提取进 `Localizable.xcstrings`（8 个 key），该文件由 Crowdin 管理，是**与 upstream 最可能的冲突点**。
 - **pbxproj 为传统手动登记**：新增源文件需在 Xcode 手动 Add（Reference in place + Create groups + 仅勾 boringNotch target）。曾试同步分组方案，已还原。
 
