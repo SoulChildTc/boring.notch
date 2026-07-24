@@ -240,6 +240,7 @@ class MusicManager: ObservableObject {
             }
 
             // Fetch lyrics on content change
+            NSLog("[Lyrics Debug] Song changed: title=%@, artist=%@, duration=%.1fs, current songDuration=%.1fs", state.title, state.artist, state.duration, self.songDuration)
             self.fetchLyricsIfAvailable(bundleIdentifier: state.bundleIdentifier, title: state.title, artist: state.artist)
         }
 
@@ -529,7 +530,9 @@ class MusicManager: ObservableObject {
     // MARK: - Song matching
     private func matchSong(candidates: [SongCandidate], targetTitle: String, targetArtist: String, targetDuration: TimeInterval) -> SongCandidate? {
         let filtered = candidates.filter { abs($0.duration - targetDuration) <= 3 }
+        NSLog("[Lyrics Debug] matchSong: filtered by duration (%.1fs ±3) -> %ld/%ld candidates remain", targetDuration, filtered.count, candidates.count)
         guard !filtered.isEmpty else {
+            NSLog("[Lyrics Debug] matchSong: no duration match, falling back to candidates.first")
             return candidates.first
         }
         let targetArtistLower = targetArtist.lowercased().trimmingCharacters(in: .whitespaces)
@@ -586,6 +589,12 @@ class MusicManager: ObservableObject {
                 return SongCandidate(id: "\(songId)", name: songName, artist: firstArtist, duration: duration / 1000.0)
             }
 
+            NSLog("[Lyrics Debug] NetEase search results for \"%@\":", query)
+            for c in candidates {
+                NSLog("  - id=%@ name=%@ artist=%@ duration=%.1fs", c.id, c.name, c.artist, c.duration)
+            }
+            NSLog("[Lyrics Debug] targetDuration=%.1fs title=%@ artist=%@", self.songDuration, cleanTitle, cleanArtist)
+
             guard !candidates.isEmpty else {
                 self.currentLyrics = ""
                 self.isFetchingLyrics = false
@@ -593,6 +602,7 @@ class MusicManager: ObservableObject {
             }
 
             let best = matchSong(candidates: candidates, targetTitle: cleanTitle, targetArtist: cleanArtist, targetDuration: self.songDuration)
+            NSLog("[Lyrics Debug] NetEase matched song: id=%@ name=%@ artist=%@ duration=%.1fs", best?.id ?? "nil", best?.name ?? "nil", best?.artist ?? "nil", best?.duration ?? 0)
             guard let songId = best?.id else {
                 self.currentLyrics = ""
                 self.isFetchingLyrics = false
