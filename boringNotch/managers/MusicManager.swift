@@ -27,6 +27,28 @@ class MusicManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var controllerCancellables = Set<AnyCancellable>()
     private var debounceIdleTask: Task<Void, Never>?
+    
+    private let lyricsLogURL: URL = {
+        let fm = FileManager.default
+        let support = try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let dir = (support ?? fm.temporaryDirectory).appendingPathComponent("boringNotch", isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("lyrics-debug.log")
+    }()
+    
+    private func lyricsLog(_ message: String) {
+        let line = "\(Date().ISO8601Format()) \(message)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        if FileManager.default.fileExists(atPath: lyricsLogURL.path) {
+            if let handle = try? FileHandle(forWritingTo: lyricsLogURL) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                try? handle.close()
+            }
+        } else {
+            try? data.write(to: lyricsLogURL, options: .atomic)
+        }
+    }
 
     // Helper to check if macOS has removed support for NowPlayingController
     public private(set) var isNowPlayingDeprecated: Bool = false
@@ -240,7 +262,7 @@ class MusicManager: ObservableObject {
             }
 
             // Fetch lyrics on content change
-            NSLog("[Lyrics Debug] Song changed: title=%@, artist=%@, duration=%.1fs, current songDuration=%.1fs", state.title, state.artist, state.duration, self.songDuration)
+            lyricsLog("Song changed: title=\(state.title) artist=\(state.artist) duration=\(state.duration)s currentSongDuration=\(self.songDuration)s")
             self.fetchLyricsIfAvailable(bundleIdentifier: state.bundleIdentifier, title: state.title, artist: state.artist)
         }
 
@@ -530,9 +552,9 @@ class MusicManager: ObservableObject {
     // MARK: - Song matching
     private func matchSong(candidates: [SongCandidate], targetTitle: String, targetArtist: String, targetDuration: TimeInterval) -> SongCandidate? {
         let filtered = candidates.filter { abs($0.duration - targetDuration) <= 3 }
-        NSLog("[Lyrics Debug] matchSong: filtered by duration (%.1fs ±3) -> %ld/%ld candidates remain", targetDuration, filtered.count, candidates.count)
+        lyricsLog("matchSong: filtered by duration (\(targetDuration)s ±3) -> \(filtered.count)/\(candidates.count) candidates remain")
         guard !filtered.isEmpty else {
-            NSLog("[Lyrics Debug] matchSong: no duration match, falling back to candidates.first")
+            lyricsLog("matchSong: no duration match, falling back to candidates.first")
             return candidates.first
         }
         let targetArtistLower = targetArtist.lowercased().trimmingCharacters(in: .whitespaces)
@@ -589,11 +611,11 @@ class MusicManager: ObservableObject {
                 return SongCandidate(id: "\(songId)", name: songName, artist: firstArtist, duration: duration / 1000.0)
             }
 
-            NSLog("[Lyrics Debug] NetEase search results for \"%@\":", query)
+            lyricsLog("NetEase search results for \"\(query)\":")
             for c in candidates {
-                NSLog("  - id=%@ name=%@ artist=%@ duration=%.1fs", c.id, c.name, c.artist, c.duration)
+                lyricsLog("  - id=\(c.id) name=\(c.name) artist=\(c.artist) duration=\(c.duration)s")
             }
-            NSLog("[Lyrics Debug] targetDuration=%.1fs title=%@ artist=%@", self.songDuration, cleanTitle, cleanArtist)
+            lyricsLog("targetDuration=\(self.songDuration)s title=\(cleanTitle) artist=\(cleanArtist)")
 
             guard !candidates.isEmpty else {
                 self.currentLyrics = ""
@@ -602,7 +624,7 @@ class MusicManager: ObservableObject {
             }
 
             let best = matchSong(candidates: candidates, targetTitle: cleanTitle, targetArtist: cleanArtist, targetDuration: self.songDuration)
-            NSLog("[Lyrics Debug] NetEase matched song: id=%@ name=%@ artist=%@ duration=%.1fs", best?.id ?? "nil", best?.name ?? "nil", best?.artist ?? "nil", best?.duration ?? 0)
+            lyricsLog("NetEase matched song: id=\(best?.id ?? "nil") name=\(best?.name ?? "nil") artist=\(best?.artist ?? "nil") duration=\(best?.duration ?? 0)s")
             guard let songId = best?.id else {
                 self.currentLyrics = ""
                 self.isFetchingLyrics = false
