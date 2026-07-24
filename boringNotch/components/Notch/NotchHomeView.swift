@@ -139,20 +139,23 @@ struct MusicControlsView: View {
     }
 
     private func songInfo(width: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            MarqueeText(
-                $musicManager.songTitle, font: .headline, nsFont: .headline, textColor: .white,
-                frameWidth: width)
-            MarqueeText(
-                $musicManager.artistName,
-                font: .headline,
-                nsFont: .headline,
-                textColor: Defaults[.playerColorTinting]
-                    ? Color(nsColor: musicManager.avgColor)
-                        .ensureMinimumBrightness(factor: 0.6) : .gray,
-                frameWidth: width
-            )
-            .fontWeight(.medium)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Text(musicManager.songTitle)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                Text("—")
+                    .foregroundColor(.gray)
+                    .font(.headline)
+                Text(musicManager.artistName)
+                    .font(.headline)
+                    .fontWeight(.medium)
+                    .foregroundColor(Defaults[.playerColorTinting]
+                        ? Color(nsColor: musicManager.avgColor)
+                            .ensureMinimumBrightness(factor: 0.6) : .gray)
+                    .lineLimit(1)
+            }
             if Defaults[.enableLyrics] {
                 TimelineView(.animation(minimumInterval: 0.25)) { timeline in
                     let currentElapsed: Double = {
