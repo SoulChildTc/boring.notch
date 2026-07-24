@@ -23,7 +23,7 @@ if [ -z "$APP" ]; then
 fi
 
 echo "==> Codesigning $APP ..."
-codesign --force --sign - --deep "$APP"
+codesign --force --sign "boringNotchDev" --deep "$APP"
 
 echo "==> Creating $ZIP_PATH ..."
 rm -f "$ZIP_PATH"
