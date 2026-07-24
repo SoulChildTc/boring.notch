@@ -27,6 +27,7 @@ class MusicManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var controllerCancellables = Set<AnyCancellable>()
     private var debounceIdleTask: Task<Void, Never>?
+    private var lyricsFetchTask: Task<Void, Never>?
     
     private let lyricsLogURL: URL = {
         let fm = FileManager.default
@@ -391,7 +392,8 @@ class MusicManager: ObservableObject {
 
         // Prefer native Apple Music lyrics when available
         if let bundleIdentifier = bundleIdentifier, bundleIdentifier.contains("com.apple.Music") {
-            Task { @MainActor in
+            lyricsFetchTask?.cancel()
+            lyricsFetchTask = Task { @MainActor in
                 let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music")
                 guard !runningApps.isEmpty else {
                     await self.fetchLyricsBySource(bundleIdentifier: bundleIdentifier, title: title, artist: artist)
@@ -435,7 +437,8 @@ class MusicManager: ObservableObject {
                 await self.fetchLyricsBySource(bundleIdentifier: bundleIdentifier, title: title, artist: artist)
             }
         } else {
-            Task { @MainActor in
+            lyricsFetchTask?.cancel()
+            lyricsFetchTask = Task { @MainActor in
                 self.isFetchingLyrics = true
                 self.currentLyrics = ""
                 await self.fetchLyricsBySource(bundleIdentifier: bundleIdentifier ?? "", title: title, artist: artist)
