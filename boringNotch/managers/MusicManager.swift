@@ -605,7 +605,7 @@ class MusicManager: ObservableObject {
             return
         }
 
-        let searchURL = "https://music.163.com/api/search/get/web?s=\(encodedQuery)&limit=5&offset=0&type=1"
+        let searchURL = "https://music.163.com/api/search/get/web?s=\(encodedQuery)&limit=10&offset=0&type=1"
         guard let url = URL(string: searchURL) else {
             self.currentLyrics = ""
             self.isFetchingLyrics = false
