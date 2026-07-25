@@ -282,9 +282,7 @@ private struct ScratchMarkdownPreview: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     Markdown(text)
-                        .markdownTextStyle {
-                            FontSize(13)
-                        }
+                        .markdownTheme(.scratchpadDark)
                         .textSelection(.enabled)
                 }
             }
@@ -293,6 +291,102 @@ private struct ScratchMarkdownPreview: View {
         }
         .scrollIndicators(.never)
     }
+}
+
+// Markdown theme aligned with boring.notch's design language: the app's
+// `effectiveAccent` color for emphasis, rounded-design headings (like BoringHeader
+// / ShelfView), 12pt corner radii, and neutral white/gray body on the dark panel.
+private extension Theme {
+    static let scratchpadDark = Theme()
+        .text {
+            ForegroundColor(Color.white.opacity(0.9))
+            FontSize(13)
+        }
+        .code {
+            FontFamilyVariant(.monospaced)
+            FontSize(12)
+            ForegroundColor(.effectiveAccent)
+            BackgroundColor(Color.white.opacity(0.1))
+        }
+        .link {
+            ForegroundColor(.effectiveAccent)
+        }
+        .heading1 { config in
+            config.label
+                .markdownMargin(top: 14, bottom: 8)
+                .markdownTextStyle {
+                    FontFamily(.system(.rounded))
+                    FontWeight(.bold)
+                    FontSize(21)
+                    ForegroundColor(.white)
+                }
+        }
+        .heading2 { config in
+            config.label
+                .markdownMargin(top: 12, bottom: 6)
+                .markdownTextStyle {
+                    FontFamily(.system(.rounded))
+                    FontWeight(.bold)
+                    FontSize(17)
+                    ForegroundColor(.white)
+                }
+        }
+        .heading3 { config in
+            config.label
+                .markdownMargin(top: 10, bottom: 5)
+                .markdownTextStyle {
+                    FontFamily(.system(.rounded))
+                    FontWeight(.semibold)
+                    FontSize(15)
+                    ForegroundColor(.effectiveAccent)
+                }
+        }
+        .paragraph { config in
+            config.label
+                .markdownMargin(top: 0, bottom: 8)
+                .lineSpacing(3)
+        }
+        .blockquote { config in
+            config.label
+                .padding(.vertical, 4)
+                .padding(.leading, 14)
+                .overlay(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.effectiveAccent.opacity(0.8))
+                        .frame(width: 3)
+                }
+                .markdownTextStyle {
+                    ForegroundColor(Color.white.opacity(0.65))
+                }
+        }
+        .codeBlock { config in
+            config.label
+                .padding(12)
+                .markdownTextStyle {
+                    FontFamilyVariant(.monospaced)
+                    FontSize(12)
+                    ForegroundColor(Color.white.opacity(0.9))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.white.opacity(0.07))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .markdownMargin(top: 8, bottom: 8)
+        }
+        .listItem { config in
+            config.label
+                .markdownMargin(top: 3, bottom: 3)
+        }
+        .taskListMarker { configuration in
+            Image(systemName: configuration.isCompleted ? "checkmark.circle.fill" : "circle")
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(configuration.isCompleted ? Color.effectiveAccent : Color.white.opacity(0.5))
+                .imageScale(.medium)
+                .relativeFrame(minWidth: .em(1.5), alignment: .trailing)
+        }
+        .table { config in
+            config.label
+                .markdownTableBorderStyle(.init(color: Color.white.opacity(0.15)))
+        }
 }
 
 // Custom NSTextView wrapper. Each instance is bound to ONE fixed tabID. The parent
