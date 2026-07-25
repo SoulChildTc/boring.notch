@@ -46,7 +46,7 @@ struct LyricsHUDView: View {
                 RoundedRectangle(cornerRadius: 4)
                     .fill(.black.opacity(0.6))
             )
-            .padding(.bottom, 4)
+            .padding(.bottom, 0)
             .padding(.horizontal, 8)
             .transition(.opacity)
             .onReceive(lyricsTimer) { _ in
