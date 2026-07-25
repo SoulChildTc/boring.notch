@@ -190,11 +190,25 @@ class BoringViewModel: NSObject, ObservableObject {
     }
 
     func open() {
-        self.notchSize = openNotchSize
+        // Restore the enlarged Scratchpad height if the user was enlarged before the
+        // panel collapsed (e.g. hover-out) and hasn't left the Scratchpad tab.
+        let enlarged = coordinator.currentView == .scratchpad && ScratchpadStore.shared.isEnlarged
+        self.notchSize = enlarged ? enlargedNotchSize(screenUUID: screenUUID) : openNotchSize
         self.notchState = .open
-        
+
         // Force music information update when notch is opened
         MusicManager.shared.forceUpdate()
+    }
+
+    // Scratchpad enlarge: swap the open notch height between the default and a
+    // screen-relative enlarged height, animated. Only meaningful while open.
+    func applyScratchpadEnlarged(_ enlarged: Bool) {
+        guard notchState == .open else { return }
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.85)) {
+            self.notchSize = enlarged
+                ? enlargedNotchSize(screenUUID: screenUUID)
+                : openNotchSize
+        }
     }
 
     func close() {

@@ -232,7 +232,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func createBoringNotchWindow(for screen: NSScreen, with viewModel: BoringViewModel) -> NSWindow {
-        let rect = NSRect(x: 0, y: 0, width: windowSize.width, height: windowSize.height)
+        // Build at the largest size the notch can ever need (enlarged Scratchpad),
+        // so enlarging only changes the notch content height, never the window frame.
+        let maxSize = maxWindowSize()
+        let rect = NSRect(x: 0, y: 0, width: maxSize.width, height: maxSize.height)
         let styleMask: NSWindow.StyleMask = [.borderless, .nonactivatingPanel, .utilityWindow, .hudWindow]
         
         let window = BoringNotchSkyLightWindow(contentRect: rect, styleMask: styleMask, backing: .buffered, defer: false)

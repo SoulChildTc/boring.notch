@@ -10,6 +10,7 @@ import SwiftUI
 
 struct ScratchpadView: View {
     @StateObject private var store = ScratchpadStore.shared
+    @EnvironmentObject private var vm: BoringViewModel
     @Namespace private var tabHighlight
 
     var body: some View {
@@ -24,6 +25,8 @@ struct ScratchpadView: View {
             } else if store.selectedTabID == nil {
                 store.selectedTabID = store.tabs.first?.id
             }
+            // Re-apply enlarge state when the panel (re)shows Scratchpad.
+            vm.applyScratchpadEnlarged(store.isEnlarged)
         }
     }
 
@@ -48,6 +51,25 @@ struct ScratchpadView: View {
                 }
             }
             .scrollIndicators(.never)
+
+            Spacer(minLength: 4)
+
+            Button {
+                let next = !store.isEnlarged
+                store.isEnlarged = next
+                vm.applyScratchpadEnlarged(next)
+            } label: {
+                Image(systemName: store.isEnlarged
+                      ? "arrow.down.right.and.arrow.up.left"
+                      : "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.gray)
+                    .frame(width: 22, height: 22)
+                    .background(Color(nsColor: .secondarySystemFill).opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .help(store.isEnlarged ? "还原" : "放大")
         }
         .frame(height: 26)
     }
@@ -298,6 +320,7 @@ private struct WindowFocusRequester: NSViewRepresentable {
 
 #Preview {
     ScratchpadView()
+        .environmentObject(BoringViewModel())
         .frame(width: 640, height: 190)
         .background(.black)
 }

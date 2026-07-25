@@ -178,6 +178,14 @@ struct ContentView: View {
                             }
                         }
                     }
+                    .onChange(of: coordinator.currentView) { _, newView in
+                        // Enlarge is bound to the Scratchpad tab only: reset it when
+                        // the user leaves Scratchpad, never on panel collapse/hover.
+                        if newView != .scratchpad && ScratchpadStore.shared.isEnlarged {
+                            ScratchpadStore.shared.isEnlarged = false
+                            vm.applyScratchpadEnlarged(false)
+                        }
+                    }
                     .onChange(of: vm.isBatteryPopoverActive) {
                         if !vm.isBatteryPopoverActive && !isHovering && vm.notchState == .open && !SharingStateManager.shared.preventNotchClose {
                             hoverTask?.cancel()
@@ -214,7 +222,7 @@ struct ContentView: View {
             }
         }
         .padding(.bottom, 8)
-        .frame(maxWidth: windowSize.width, maxHeight: windowSize.height, alignment: .top)
+        .frame(maxWidth: maxWindowSize().width, maxHeight: maxWindowSize().height, alignment: .top)
         .compositingGroup()
         .scaleEffect(
             x: gestureScale,

@@ -15,6 +15,30 @@ let batterySneakSize: CGSize = .init(width: 160, height: 1)
 let shadowPadding: CGFloat = 20
 let openNotchSize: CGSize = .init(width: 640, height: 190)
 let windowSize: CGSize = .init(width: openNotchSize.width, height: openNotchSize.height + shadowPadding)
+
+// Scratchpad temporary "enlarge" support. The enlarged content height is a fixed
+// fraction of the current screen so it adapts to any display. The physical window
+// is built at `enlargedWindowSize` up-front so enlarging only changes `notchSize`,
+// never the window frame. Not persisted — resets to openNotchSize on close.
+let enlargedNotchHeightFraction: CGFloat = 0.6
+
+@MainActor func enlargedNotchHeight(screenUUID: String? = nil) -> CGFloat {
+    let screenHeight = getScreenFrame(screenUUID)?.height ?? 900
+    return (screenHeight * enlargedNotchHeightFraction).rounded()
+}
+
+@MainActor func enlargedNotchSize(screenUUID: String? = nil) -> CGSize {
+    .init(width: openNotchSize.width, height: enlargedNotchHeight(screenUUID: screenUUID))
+}
+
+// Largest window the app ever needs: tall enough to host an enlarged notch on the
+// tallest attached screen, plus shadow padding. Building the window at this size
+// keeps enlarge/restore off the window layer entirely.
+@MainActor func maxWindowSize() -> CGSize {
+    let tallest = NSScreen.screens.map(\.frame.height).max() ?? 900
+    let height = (tallest * enlargedNotchHeightFraction).rounded() + shadowPadding
+    return .init(width: windowSize.width, height: max(windowSize.height, height))
+}
 let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 19, bottom: 24), closed: (top: 6, bottom: 14))
 
 enum MusicPlayerImageSizes {
