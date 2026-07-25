@@ -8,7 +8,7 @@
 - Soul Child — 想法的提出者，负责方向/范围/商业模式决策，非技术执行角色，技术选型委托给巴迪。
 - 巴迪 (Buddy) — 产品需求全流程协同助手，负责技术选型、架构、实现。
 
-**核心约束**：最大程度保持 upstream merge-friendly。未来要能持续 `git fetch upstream && git merge upstream/main`。不大面积修改已有代码，不重构核心架构，优先新增文件，已有文件只做行级追加。
+**核心约束**：不再把 upstream merge-friendly 作为硬约束。以前要求"最大程度保持可合并、不大面积改已有代码、只加行"，现已取消——为功能需要可以自由修改已有代码、重构、深改核心。未来若想同步 upstream 就去尝试 `git fetch upstream && git merge upstream/main`，能合就合，合不了就不合，不为保留合并能力牺牲功能实现空间。
 
 ---
 
@@ -285,7 +285,7 @@ case .scratchpad:            // ← 新增
 
 ### 待办 / 已知限制
 
-- **"放大"未实现**：`isEnlarged` 状态与按钮已存在，但未接放大逻辑。原地放大需改 notch 固定窗口尺寸（`boringNotchApp.swift` 窗口创建、`ContentView` L206 maxHeight、`vm.notchSize`、形状/动画），属四处联动深改。
+- **"放大"已实现（第四阶段，见下）**：临时增高 notch 内容区，per-tab 生效，不持久化。
 - **切 tab 跟手动画未做**：当前左右滑是"过阈值瞬间切换 + 淡入"，非 Mac 桌面那种内容随手指实时推移。跟手需接实时 translation 做双页联动位移 + 松手判定，会碰 `ContentView` tab 内容布局并可能与展开/收起动画叠加，暂缓。
 - **界面文案写死中文**：未走 `Localizable.xcstrings`。build 时 Xcode 会自动把中文字面量提取进 `Localizable.xcstrings`（8 个 key），该文件由 Crowdin 管理，是**与 upstream 最可能的冲突点**。
 - **pbxproj 为传统手动登记**：新增源文件需在 Xcode 手动 Add（Reference in place + Create groups + 仅勾 boringNotch target）。曾试同步分组方案，已还原。
@@ -300,9 +300,51 @@ case .scratchpad:            // ← 新增
 
 ---
 
+## 第四阶段 — Scratchpad 临时放大（已完成，功能可用）
+
+**需求**：编辑区在固定 190px 高度内太挤，想临时增高 notch 看更多内容。临时性、不持久化、per-tab。
+
+**最终语义（重要）**：放大态**只与"是否停留在 Scratchpad tab"绑定**，与点击位置、面板 hover 开合完全无关。
+- 放大后点刘海、点空白、鼠标移出让面板 hover 收起再划开 —— 全部保持放大。
+- **只有主动切到别的 tab（Home/Shelf）才还原**默认高度；再切回 Scratchpad 是默认高度（不记忆）。
+
+### 尺寸链路（关键认知）
+
+notch 有两道高度天花板：① 物理 NSPanel 窗口尺寸；② `ContentView` 的 `.frame(maxHeight:)` 裁剪。二者原本都锁死在 `windowSize`（640×210）。真正可见的 notch 高度由 `vm.notchSize.height` + 黑色形状决定，窗口只是画布。
+
+**收敛策略**：物理窗口**启动时一次性建到最大**（`maxWindowSize()`，按最高屏幕算），之后放大/还原**只改 `vm.notchSize.height`，永不再碰窗口层**。这把最危险的 window 改动收敛成"创建时一行"。透明区不可见、不挡点击。
+
+放大目标高度 = 当前屏幕高 × `enlargedNotchHeightFraction`（0.6），运行时按屏幕算，多显示器自适应。
+
+### 已落地文件
+
+新增行（安全，无 upstream 交集）：
+- `sizing/matters.swift`：加 `enlargedNotchHeightFraction`、`enlargedNotchHeight()`、`enlargedNotchSize()`、`maxWindowSize()` 纯函数
+- `components/Scratchpad/ScratchpadStore.swift`：加 `@Published var isEnlarged`（**不写盘**，持久化逻辑没碰）
+- `components/Scratchpad/ScratchpadView.swift`：tab 条右侧加放大/还原按钮（图标随态切换）；`onAppear` 重新套用放大态；`#Preview` 补 `.environmentObject(BoringViewModel())`（因视图新依赖 `@EnvironmentObject vm`）
+
+官方文件行级修改：
+- `models/BoringViewModel.swift`：新增 `applyScratchpadEnlarged(_:)`（带 spring 在默认/放大高间切）；`open()` 加一段——重开时若仍在 scratchpad 且 `isEnlarged` 则恢复放大高度（否则 hover 收起再开会缩回）
+- `boringNotchApp.swift` L235：窗口创建高度 `windowSize` → `maxWindowSize()`（唯一的窗口层改动）
+- `ContentView.swift` L217：`.frame(maxHeight: windowSize.height)` → `maxWindowSize().height`（放开裁剪，内容仍 `.top` 锚定，多出空间在黑框下方）
+- `ContentView.swift`：`mainLayout` 加 `.onChange(of: coordinator.currentView)`——离开 `.scratchpad` 时才复位 `isEnlarged`
+
+### 踩过的坑
+
+1. **误诊点击收起**：一度以为"点空白/刘海会缩小"是点击穿透到 `doOpen()`，加了 `contentShape`+空 `onTapGesture` 补丁。**错了**——点击从不收起 notch，`doOpen()` 只负责打开。真凶是 `handleHover` 鼠标移出触发的 `vm.close()`（ContentView L570）。补丁已移除。
+2. **还原时机**：最初放在 `ScratchpadView.onDisappear`，但面板 hover 收起时视图也 disappear，会误还原。改为监听 `coordinator.currentView`，只在真正离开 tab 时复位。
+
+### 对 upstream merge 的影响
+
+- 核心风险点是 `boringNotchApp.swift` 窗口创建行与 `ContentView` maxHeight 行——属官方 window/布局区域，upstream 若改动此处会冲突，但均为**单行替换**，冲突小且易辨。
+- `open()` 内新增逻辑是加行，未删改原有行。
+- 其余全在新增文件或新增 `onChange`，零交集。
+
+---
+
 ## 开发流程约定
 
 1. **每次只完成一个阶段**，不要一次生成全部代码
-2. **每次修改必须说明**：修改文件、修改原因、对 upstream merge 的影响
-3. **优先新增文件**，已有文件只做行级追加
-4. **避免**：高频刷新整个界面、破坏已有动画系统、重写 Notch Window
+2. **每次修改必须说明**：修改文件、修改原因（若顺手评估了 upstream merge 影响可一并说，但不再是硬性要求）
+3. **改动方式不设限**：新增文件、修改已有代码、重构均可，以把功能做对做好为准
+4. **仍需避免**：高频刷新整个界面、破坏已有动画系统（这些是体验/正确性考量，与 merge 无关）
