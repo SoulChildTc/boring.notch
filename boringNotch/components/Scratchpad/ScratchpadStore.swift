@@ -19,6 +19,21 @@ final class ScratchpadStore: ObservableObject {
     // Transient enlarge state for the current editing session. Never persisted.
     @Published var isEnlarged: Bool = false
 
+    // Per-tab preview (Markdown rendered) vs edit mode. Transient, never persisted.
+    @Published private var previewingTabIDs: Set<ScratchTab.ID> = []
+
+    func isPreviewing(_ tabID: ScratchTab.ID) -> Bool {
+        previewingTabIDs.contains(tabID)
+    }
+
+    func togglePreview(_ tabID: ScratchTab.ID) {
+        if previewingTabIDs.contains(tabID) {
+            previewingTabIDs.remove(tabID)
+        } else {
+            previewingTabIDs.insert(tabID)
+        }
+    }
+
     // Live editing content lives here, NOT in @Published tabs, so keystrokes never
     // trigger objectWillChange (which would rebuild every tab chip on each char).
     // Merged back into `tabs` only when saving.
@@ -82,6 +97,7 @@ final class ScratchpadStore: ObservableObject {
         let removedIndex = tabs.firstIndex { $0.id == tab.id }
         tabs.removeAll { $0.id == tab.id }
         contentCache[tab.id] = nil
+        previewingTabIDs.remove(tab.id)
         if selectedTabID == tab.id {
             if let removedIndex, removedIndex < tabs.count {
                 selectedTabID = tabs[removedIndex].id

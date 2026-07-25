@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import MarkdownUI
 
 struct ScratchpadView: View {
     @StateObject private var store = ScratchpadStore.shared
@@ -54,6 +55,29 @@ struct ScratchpadView: View {
 
             Spacer(minLength: 4)
 
+            if let selectedID = store.selectedTabID {
+                let previewing = store.isPreviewing(selectedID)
+                Button {
+                    store.togglePreview(selectedID)
+                } label: {
+                    Image(systemName: previewing ? "pencil" : "eye")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(previewing ? .white : .gray)
+                        .frame(width: 22, height: 22)
+                        .background(Color(nsColor: .secondarySystemFill).opacity(0.5))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .help(previewing ? "编辑" : "预览 Markdown")
+
+                // Hidden ⌘E shortcut mirroring the preview toggle.
+                Button("") { store.togglePreview(selectedID) }
+                    .buttonStyle(.plain)
+                    .frame(width: 0, height: 0)
+                    .opacity(0)
+                    .keyboardShortcut("e", modifiers: .command)
+            }
+
             Button {
                 let next = !store.isEnlarged
                 store.isEnlarged = next
@@ -77,13 +101,19 @@ struct ScratchpadView: View {
     @ViewBuilder
     private var editor: some View {
         if let selectedID = store.selectedTabID {
-            ScratchTextEditor(tabID: selectedID)
-                .id(selectedID)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(nsColor: .textBackgroundColor).opacity(0.15))
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Group {
+                if store.isPreviewing(selectedID) {
+                    ScratchMarkdownPreview(tabID: selectedID)
+                } else {
+                    ScratchTextEditor(tabID: selectedID)
+                        .id(selectedID)
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(nsColor: .textBackgroundColor).opacity(0.15))
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(spacing: 8) {
                 Image(systemName: "note.text")
@@ -230,6 +260,36 @@ private struct ScratchTabChip: View {
 
     private func cancelRename() {
         isRenaming = false
+    }
+}
+
+// Markdown preview for one tab. Reads the tab's live content from the store
+// (contentCache is updated on every keystroke) and renders it with MarkdownUI.
+private struct ScratchMarkdownPreview: View {
+    let tabID: ScratchTab.ID
+    private let store = ScratchpadStore.shared
+
+    var body: some View {
+        let text = store.content(for: tabID)
+        ScrollView(.vertical) {
+            Group {
+                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("空白内容")
+                        .foregroundStyle(.gray)
+                        .font(.system(size: 12))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Markdown(text)
+                        .markdownTextStyle {
+                            FontSize(13)
+                        }
+                        .textSelection(.enabled)
+                }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollIndicators(.never)
     }
 }
 
