@@ -306,7 +306,8 @@ case .scratchpad:            // ← 新增
 
 **最终语义（重要）**：放大态**只与"是否停留在 Scratchpad tab"绑定**，与点击位置、面板 hover 开合完全无关。
 - 放大后点刘海、点空白、鼠标移出让面板 hover 收起再划开 —— 全部保持放大。
-- **只有主动切到别的 tab（Home/Shelf）才还原**默认高度；再切回 Scratchpad 是默认高度（不记忆）。
+- **只有主动切到别的 tab（Home/Shelf）才还原**默认高度；再切回 Scratchpad 重新应用默认态。
+- ⚠️ **默认态已在第五阶段翻转**：进入 Scratchpad 现在**默认放大**（见第五阶段），此处"还原默认高度"指切到 Home/Shelf 时回到 190；进入 Scratchpad 默认是放大高度。
 
 ### 尺寸链路（关键认知）
 
@@ -339,6 +340,41 @@ notch 有两道高度天花板：① 物理 NSPanel 窗口尺寸；② `ContentV
 - 核心风险点是 `boringNotchApp.swift` 窗口创建行与 `ContentView` maxHeight 行——属官方 window/布局区域，upstream 若改动此处会冲突，但均为**单行替换**，冲突小且易辨。
 - `open()` 内新增逻辑是加行，未删改原有行。
 - 其余全在新增文件或新增 `onChange`，零交集。
+
+---
+
+## 第五阶段 — Markdown 编辑/预览 + 默认放大（已完成，功能可用）
+
+**需求**：编辑区支持 Markdown，能在编辑与预览两种模式间切换；既然支持 Markdown，进入 Scratchpad 默认就放大。
+
+### Markdown 预览
+
+- **渲染库**：`swift-markdown-ui`（`https://github.com/gonzalezreal/swift-markdown-ui`，产品名 `MarkdownUI`），SPM 加入，Target = boringNotch。纯 Swift 库，非 binary target，但解析仍走系统代理。完整支持 GFM（标题/列表/代码块/引用/表格等）。
+- **数据层零改动**：Markdown 就是纯文本，`ScratchTab.content` / 持久化 / contentCache 全没碰。功能只在编辑区 UI。
+- **预览态 per-tab、不持久化**：`ScratchpadStore` 用 `previewingTabIDs: Set<tabID>` 记哪些 tab 在预览态，`isPreviewing(_:)` / `togglePreview(_:)`。tab 关闭时清理该标志。切 tab 各自记住编辑/预览，重开默认编辑态。
+- **切换入口**：tab 条右侧 **眼睛/铅笔** 按钮 + 隐藏的 **⌘E** 快捷键（一个 opacity 0、frame 0 的 Button 承载 keyboardShortcut）。
+
+### 已落地文件（第五阶段）
+
+- `components/Scratchpad/ScratchpadStore.swift`：加 `previewingTabIDs` + `isPreviewing` / `togglePreview`；`remove` 里清理
+- `components/Scratchpad/ScratchpadView.swift`：
+  - `import MarkdownUI`
+  - 新增 `ScratchMarkdownPreview`——预览态在可滚动区用 `Markdown(text)` 渲染（字号 13，空内容占位），读 `store.content(for:)`（含最新键入）
+  - `editor` 按 `isPreviewing` 切换 `ScratchMarkdownPreview` / `ScratchTextEditor`
+  - tab 条加预览切换按钮 + ⌘E
+  - `#Preview` 已在第四阶段补 `.environmentObject`
+- **需人工操作**：Xcode File → Add Package Dependencies 添加上述库并勾 MarkdownUI（沙箱无法代跑 xcodebuild）
+
+### 默认放大（语义翻转）
+
+- `ScratchpadView.onAppear` 现在**无条件置 `isEnlarged = true` 并应用放大高度**——进入 Scratchpad 默认放大。
+- 其余逻辑不变：手动缩小按钮仍在（本次停留保持，因 `onAppear` 只在进入时触发一次，手动缩小不重新触发）；切到 Home/Shelf 时 `onChange(currentView)` 复位回 190；hover 收起再开仍由 `open()` 保持放大。
+- ⚠️ 这翻转了第四阶段"进入是默认高度"的表述，第四阶段小节已加注说明。
+
+### 对 upstream merge 的影响
+
+- 第五阶段几乎全在新增文件 / Scratchpad 自有代码，无官方文件逻辑改动（`onAppear` 改的是 Scratchpad 自己的视图）。风险最低。
+- 唯一外部变更是 pbxproj 多一条 SPM 依赖（与现有一堆依赖同模式）。
 
 ---
 

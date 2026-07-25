@@ -26,8 +26,10 @@ struct ScratchpadView: View {
             } else if store.selectedTabID == nil {
                 store.selectedTabID = store.tabs.first?.id
             }
-            // Re-apply enlarge state when the panel (re)shows Scratchpad.
-            vm.applyScratchpadEnlarged(store.isEnlarged)
+            // Markdown editing/preview wants room, so Scratchpad defaults to enlarged.
+            // The user can still shrink manually; leaving the tab resets to this default.
+            store.isEnlarged = true
+            vm.applyScratchpadEnlarged(true)
         }
     }
 
