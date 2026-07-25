@@ -6,13 +6,13 @@ struct LyricsHUDView: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var musicManager = MusicManager.shared
     @ObservedObject var coordinator = BoringViewCoordinator.shared
-    @State private var isHovering: Bool = false
     @State private var currentLine: String = ""
     @State private var scrollOffset: CGFloat = 0
+    @State private var hideHUDTask: Task<Void, Never>?
     private let lyricsTimer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
     
     var body: some View {
-        if coordinator.showLyricsHUD && !isHovering && Defaults[.enableLyricsHUD] && !Defaults[.inlineHUD] {
+        if coordinator.showLyricsHUD && !coordinator.lyricsHUDHiddenByHover && Defaults[.enableLyricsHUD] && !Defaults[.inlineHUD] {
             GeometryReader { geo in
                 let frameWidth = geo.size.width
                 Text(currentLine)
@@ -25,7 +25,7 @@ struct LyricsHUDView: View {
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .offset(x: scrollOffset)
-                    .frame(maxWidth: frameWidth, alignment: .leading)
+                    .frame(maxWidth: frameWidth, alignment: .center)
                     .clipped()
                     .onChange(of: currentLine) { _, newLine in
                         scrollOffset = 0
@@ -53,8 +53,18 @@ struct LyricsHUDView: View {
                 updateCurrentLine()
             }
             .onHover { hovering in
-                withAnimation(.easeOut(duration: 0.15)) {
-                    isHovering = hovering
+                hideHUDTask?.cancel()
+                coordinator.isHoveringHUD = hovering
+                if hovering {
+                    hideHUDTask = Task {
+                        try? await Task.sleep(for: .seconds(0.5))
+                        guard !Task.isCancelled else { return }
+                        await MainActor.run {
+                            withAnimation(.easeOut(duration: 0.15)) {
+                                coordinator.lyricsHUDHiddenByHover = true
+                            }
+                        }
+                    }
                 }
             }
         }

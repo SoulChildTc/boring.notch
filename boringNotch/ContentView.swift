@@ -532,6 +532,8 @@ VStack(alignment: .leading, spacing: 0) {
         if hovering {
             withAnimation(animationSpring) {
                 isHovering = true
+                coordinator.lyricsHUDHiddenByHover = false
+                coordinator.isHoveringHUD = false
             }
             
             if vm.notchState == .closed && Defaults[.enableHaptics] {
@@ -549,7 +551,8 @@ VStack(alignment: .leading, spacing: 0) {
                 await MainActor.run {
                     guard self.vm.notchState == .closed,
                           self.isHovering,
-                          !self.coordinator.sneakPeek.show else { return }
+                          !self.coordinator.sneakPeek.show,
+                          !self.coordinator.isHoveringHUD else { return }
                     
                     self.doOpen()
                 }
