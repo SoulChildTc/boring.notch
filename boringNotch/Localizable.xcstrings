@@ -19330,6 +19330,9 @@
         }
       }
     },
+    "Show lyrics HUD below notch" : {
+
+    },
     "Show menu bar icon" : {
       "localizations" : {
         "ar" : {

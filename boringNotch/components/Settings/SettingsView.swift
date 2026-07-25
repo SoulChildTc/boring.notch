@@ -600,6 +600,7 @@ struct Media: View {
     @Default(.sneakPeekStyles) var sneakPeekStyles
 
     @Default(.enableLyrics) var enableLyrics
+    @Default(.enableLyricsHUD) var enableLyricsHUD
     @Default(.lyricsSource) var lyricsSource
 
     var body: some View {
@@ -692,6 +693,9 @@ struct Media: View {
                         Text("NetEase Music").tag(LyricsSource.netease)
                         Text("QQ Music").tag(LyricsSource.qqMusic)
                         Text("LRCLIB").tag(LyricsSource.lrclib)
+                    }
+                    Defaults.Toggle(key: .enableLyricsHUD) {
+                        Text("Show lyrics HUD below notch")
                     }
                 }
             } header: {

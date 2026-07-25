@@ -136,6 +136,7 @@ extension Defaults.Keys {
     static let waitInterval = Key<Double>("waitInterval", default: 3)
     static let showShuffleAndRepeat = Key<Bool>("showShuffleAndRepeat", default: false)
     static let enableLyrics = Key<Bool>("enableLyrics", default: false)
+    static let enableLyricsHUD = Key<Bool>("enableLyricsHUD", default: false)
     static let lyricsSource = Key<LyricsSource>("lyricsSource", default: .auto)
     static let musicControlSlots = Key<[MusicControlButton]>(
         "musicControlSlots",

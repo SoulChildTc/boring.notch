@@ -62,7 +62,11 @@ class MusicManager: ObservableObject {
     @Published var songTitle: String = "I'm Handsome"
     @Published var artistName: String = "Me"
     @Published var albumArt: NSImage = defaultImage
-    @Published var isPlaying = false
+    @Published var isPlaying = false {
+        didSet {
+            updateLyricsHUD()
+        }
+    }
     @Published var album: String = "Self Love"
     @Published var isPlayerIdle: Bool = true
     @Published var animations: BoringAnimations = .init()
@@ -78,7 +82,11 @@ class MusicManager: ObservableObject {
     @Published var volumeControlSupported: Bool = true
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @Published var usingAppIconForArtwork: Bool = false
-    @Published var currentLyrics: String = ""
+    @Published var currentLyrics: String = "" {
+        didSet {
+            updateLyricsHUD()
+        }
+    }
     @Published var isFetchingLyrics: Bool = false
     @Published var syncedLyrics: [(time: Double, text: String)] = []
     @Published var canFavoriteTrack: Bool = false
@@ -858,6 +866,10 @@ class MusicManager: ObservableObject {
                 coordinator.toggleExpandingView(status: true, type: .music)
             }
         }
+    }
+    
+    private func updateLyricsHUD() {
+        coordinator.showLyricsHUD = Defaults[.enableLyrics] && Defaults[.enableLyricsHUD] && isPlaying && !currentLyrics.isEmpty && !Defaults[.inlineHUD]
     }
 
     // MARK: - Public Methods for controlling playback
