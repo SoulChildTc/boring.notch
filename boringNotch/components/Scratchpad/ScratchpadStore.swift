@@ -49,28 +49,20 @@ final class ScratchpadStore: ObservableObject {
     }
 
     private init() {
-        tabs = ScratchpadPersistenceService.shared.load()
-        contentCache = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0.content) })
+        let (loadedTabs, loadedContents) = ScratchpadPersistenceService.shared.load()
+        tabs = loadedTabs
+        contentCache = loadedContents
         selectedTabID = tabs.first?.id
-    }
-
-    private func mergedTabs() -> [ScratchTab] {
-        tabs.map { tab in
-            var copy = tab
-            if let cached = contentCache[tab.id], cached != tab.content {
-                copy.content = cached
-            }
-            return copy
-        }
     }
 
     private func scheduleSave() {
         saveTask?.cancel()
-        let snapshot = mergedTabs()
+        let snapshot = tabs
+        let snapshotContents = contentCache
         saveTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled, self != nil else { return }
-            ScratchpadPersistenceService.shared.save(snapshot)
+            ScratchpadPersistenceService.shared.save(snapshot, contents: snapshotContents)
         }
     }
 
@@ -134,6 +126,6 @@ final class ScratchpadStore: ObservableObject {
     }
 
     func content(for tabID: ScratchTab.ID) -> String {
-        contentCache[tabID] ?? tabs.first { $0.id == tabID }?.content ?? ""
+        contentCache[tabID] ?? ""
     }
 }
