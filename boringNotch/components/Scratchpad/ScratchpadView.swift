@@ -272,7 +272,7 @@ private struct ScratchMarkdownPreview: View {
     private let store = ScratchpadStore.shared
 
     var body: some View {
-        let text = store.content(for: tabID)
+        let text = sanitizeForMarkdown(store.content(for: tabID))
         ScrollView(.vertical) {
             Group {
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -282,6 +282,7 @@ private struct ScratchMarkdownPreview: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     Markdown(text)
+                        .markdownImageProvider(SVGFilterImageProvider())
                         .markdownTheme(.scratchpadDark)
                         .textSelection(.enabled)
                 }
@@ -290,6 +291,53 @@ private struct ScratchMarkdownPreview: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollIndicators(.never)
+    }
+}
+
+/// Strip inline `<svg>…</svg>` tags and markdown image references to SVG
+/// data URIs before passing to MarkdownUI.
+private func sanitizeForMarkdown(_ text: String) -> String {
+    var result = text
+    // Strip inline SVG tags
+    result = result.replacingOccurrences(
+        of: "<svg[^>]*>[\\s\\S]*?</svg>",
+        with: "",
+        options: .regularExpression
+    )
+    // Strip markdown image references to SVG data URIs
+    result = result.replacingOccurrences(
+        of: "!\\[[^\\]]*\\]\\([^)]*image/svg\\+xml[^)]*\\)",
+        with: "",
+        options: .regularExpression
+    )
+    // Strip markdown image references to .svg files
+    result = result.replacingOccurrences(
+        of: "!\\[[^\\]]*\\]\\([^)]*\\.svg[^)]*\\)",
+        with: "",
+        options: .regularExpression
+    )
+    return result.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+/// Custom image provider that substitutes SVG images with a placeholder
+/// icon, avoiding the noisy CGImageSource errors on macOS (which has no
+/// built-in SVG plugin).
+private struct SVGFilterImageProvider: ImageProvider {
+    func makeImage(url: URL?) -> some View {
+        if let url, isSVG(url) {
+            return AnyView(
+                Image(systemName: "photo")
+                    .foregroundColor(.secondary)
+            )
+        }
+        return AnyView(DefaultImageProvider().makeImage(url: url))
+    }
+
+    private func isSVG(_ url: URL) -> Bool {
+        let str = url.absoluteString
+        if str.hasPrefix("data:image/svg+xml") { return true }
+        if url.pathExtension.lowercased() == "svg" { return true }
+        return false
     }
 }
 
