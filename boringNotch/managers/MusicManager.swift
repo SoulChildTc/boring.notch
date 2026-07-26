@@ -571,27 +571,23 @@ class MusicManager: ObservableObject {
 
     // MARK: - Song matching
     private func matchSong(candidates: [SongCandidate], targetTitle: String, targetArtist: String, targetDuration: TimeInterval) -> SongCandidate? {
-        let filtered = candidates.filter { abs($0.duration - targetDuration) <= 3 }
-        lyricsLog("matchSong: filtered by duration (\(targetDuration)s ±3) -> \(filtered.count)/\(candidates.count) candidates remain")
-        guard !filtered.isEmpty else {
-            lyricsLog("matchSong: no duration match, falling back to candidates.first")
-            return candidates.first
+        let targetTitleNorm = normalizedQuery(targetTitle).lowercased().trimmingCharacters(in: .whitespaces)
+        let targetArtistNorm = normalizedQuery(targetArtist).lowercased().trimmingCharacters(in: .whitespaces)
+
+        let titleMatched = candidates.filter {
+            normalizedQuery($0.name).lowercased().trimmingCharacters(in: .whitespaces) == targetTitleNorm
         }
-        let targetArtistLower = targetArtist.lowercased().trimmingCharacters(in: .whitespaces)
-        let scored = filtered.map { candidate -> (SongCandidate, Int) in
-            let ca = candidate.artist.lowercased().trimmingCharacters(in: .whitespaces)
-            if ca == targetArtistLower {
-                return (candidate, 3)
-            }
-            if ca.contains(targetArtistLower) || targetArtistLower.contains(ca) {
-                return (candidate, 2)
-            }
-            if ca.hasPrefix(targetArtistLower.prefix(3)) || targetArtistLower.hasPrefix(ca.prefix(3)) {
-                return (candidate, 1)
-            }
-            return (candidate, 0)
+        lyricsLog("matchSong: title exact match -> \(titleMatched.count)/\(candidates.count) candidates remain")
+
+        let artistMatched = titleMatched.filter {
+            normalizedQuery($0.artist).lowercased().trimmingCharacters(in: .whitespaces).contains(targetArtistNorm)
         }
-        return scored.max { $0.1 < $1.1 }?.0 ?? candidates.first
+        lyricsLog("matchSong: artist contains filter -> \(artistMatched.count)/\(titleMatched.count) candidates remain")
+
+        let durationMatched = artistMatched.filter { abs($0.duration - targetDuration) <= 10 }
+        lyricsLog("matchSong: duration ±10s filter -> \(durationMatched.count)/\(artistMatched.count) candidates remain")
+
+        return durationMatched.min { abs($0.duration - targetDuration) < abs($1.duration - targetDuration) }
     }
 
     @MainActor
