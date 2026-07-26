@@ -584,10 +584,7 @@ class MusicManager: ObservableObject {
         }
         lyricsLog("matchSong: artist contains filter -> \(artistMatched.count)/\(titleMatched.count) candidates remain")
 
-        let durationMatched = artistMatched.filter { abs($0.duration - targetDuration) <= 10 }
-        lyricsLog("matchSong: duration ±10s filter -> \(durationMatched.count)/\(artistMatched.count) candidates remain")
-
-        return durationMatched.min { abs($0.duration - targetDuration) < abs($1.duration - targetDuration) }
+        return artistMatched.min { abs($0.duration - targetDuration) < abs($1.duration - targetDuration) }
     }
 
     @MainActor
