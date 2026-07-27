@@ -570,7 +570,7 @@ class MusicManager: ObservableObject {
     }
 
     // MARK: - Song matching
-    private func matchSong(candidates: [SongCandidate], targetTitle: String, targetArtist: String, targetDuration: TimeInterval) -> SongCandidate? {
+    private func matchSong(candidates: [SongCandidate], targetTitle: String, targetArtist: String, targetDuration: TimeInterval) -> [SongCandidate] {
         let targetTitleNorm = normalizedQuery(targetTitle).lowercased().trimmingCharacters(in: .whitespaces)
         let targetArtistNorm = normalizedQuery(targetArtist).lowercased().trimmingCharacters(in: .whitespaces)
 
@@ -584,7 +584,7 @@ class MusicManager: ObservableObject {
         }
         lyricsLog("matchSong: artist contains filter -> \(artistMatched.count)/\(titleMatched.count) candidates remain")
 
-        return artistMatched.min { abs($0.duration - targetDuration) < abs($1.duration - targetDuration) }
+        return artistMatched.sorted { abs($0.duration - targetDuration) < abs($1.duration - targetDuration) }
     }
 
     @MainActor
@@ -636,36 +636,54 @@ class MusicManager: ObservableObject {
                 return
             }
 
-            let best = matchSong(candidates: candidates, targetTitle: cleanTitle, targetArtist: cleanArtist, targetDuration: self.songDuration)
-            lyricsLog("NetEase matched song: id=\(best?.id ?? "nil") name=\(best?.name ?? "nil") artist=\(best?.artist ?? "nil") duration=\(best?.duration ?? 0)s")
-            guard let songId = best?.id else {
+            let matchedCandidates = matchSong(candidates: candidates, targetTitle: cleanTitle, targetArtist: cleanArtist, targetDuration: self.songDuration)
+            lyricsLog("NetEase matched candidates: \(matchedCandidates.count) total, trying in order")
+
+            guard !matchedCandidates.isEmpty else {
                 self.currentLyrics = ""
                 self.isFetchingLyrics = false
                 return
             }
 
-            let lyricURL = "https://music.163.com/api/song/lyric?id=\(songId)&lv=-1&kv=-1&tv=-1"
-            guard let lyricUrl = URL(string: lyricURL) else {
-                self.currentLyrics = ""
-                self.isFetchingLyrics = false
-                return
+            var bestLyrics: String?
+            var bestSynced: [(time: Double, text: String)] = []
+
+            for (index, candidate) in matchedCandidates.enumerated() {
+                let lyricURL = "https://music.163.com/api/song/lyric?id=\(candidate.id)&lv=-1&kv=-1&tv=-1"
+                guard let lyricUrl = URL(string: lyricURL) else { continue }
+
+                let (lyricData, _) = try await URLSession.shared.data(from: lyricUrl)
+                guard let lyricJson = try JSONSerialization.jsonObject(with: lyricData) as? [String: Any],
+                      let lrc = lyricJson["lrc"] as? [String: Any],
+                      let lyricStr = lrc["lyric"] as? String else {
+                    lyricsLog("NetEase lyrics API: no lyric field for song \(candidate.id)")
+                    continue
+                }
+
+                let stripped = self.stripLRC(lyricStr)
+                let synced = self.parseLRC(lyricStr)
+
+                if index == 0 {
+                    bestLyrics = stripped
+                    bestSynced = synced
+                }
+
+                if !synced.isEmpty {
+                    bestLyrics = stripped
+                    bestSynced = synced
+                    lyricsLog("NetEase found synced lyrics at candidate \(candidate.id) (\(candidate.name) - \(candidate.artist)): \(synced.count) lines")
+                    break
+                }
+
+                lyricsLog("NetEase candidate \(candidate.id) has no synced lyrics, trying next")
             }
 
-            let (lyricData, _) = try await URLSession.shared.data(from: lyricUrl)
-            guard let lyricJson = try JSONSerialization.jsonObject(with: lyricData) as? [String: Any],
-                  let lrc = lyricJson["lrc"] as? [String: Any],
-                  let lyricStr = lrc["lyric"] as? String else {
-                lyricsLog("NetEase lyrics API: no lyric field in response for song \(songId)")
-                self.currentLyrics = ""
-                self.isFetchingLyrics = false
-                return
-            }
-
-            self.currentLyrics = self.stripLRC(lyricStr)
+            self.currentLyrics = bestLyrics ?? ""
+            self.syncedLyrics = bestSynced
             self.isFetchingLyrics = false
-            self.syncedLyrics = self.parseLRC(lyricStr)
-            if self.syncedLyrics.isEmpty {
-                lyricsLog("NetEase lyrics: no synced lines, stripped length=\(self.currentLyrics.count) content=\"\(self.currentLyrics.prefix(100))\"")
+
+            if bestSynced.isEmpty {
+                lyricsLog("NetEase lyrics: no synced lines from any candidate, stripped length=\(self.currentLyrics.count)")
             } else {
                 lyricsLog("NetEase lyrics: \(self.syncedLyrics.count) synced lines, first=\"\(self.syncedLyrics.first?.text ?? "")\"")
             }
@@ -720,36 +738,55 @@ class MusicManager: ObservableObject {
                 return
             }
 
-            let best = matchSong(candidates: candidates, targetTitle: cleanTitle, targetArtist: cleanArtist, targetDuration: self.songDuration)
-            guard let songmid = best?.id else {
+            let matchedCandidates = matchSong(candidates: candidates, targetTitle: cleanTitle, targetArtist: cleanArtist, targetDuration: self.songDuration)
+            lyricsLog("QQMusic matched candidates: \(matchedCandidates.count) total, trying in order")
+
+            guard !matchedCandidates.isEmpty else {
                 self.currentLyrics = ""
                 self.isFetchingLyrics = false
                 return
             }
 
-            let lyricURL = "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=\(songmid)&g_tk=0&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0"
-            guard let lyricUrl = URL(string: lyricURL) else {
-                self.currentLyrics = ""
-                self.isFetchingLyrics = false
-                return
+            var bestLyrics: String?
+            var bestSynced: [(time: Double, text: String)] = []
+
+            for (index, candidate) in matchedCandidates.enumerated() {
+                let lyricURL = "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=\(candidate.id)&g_tk=0&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0"
+                guard let lyricUrl = URL(string: lyricURL) else { continue }
+
+                var request = URLRequest(url: lyricUrl)
+                request.setValue("https://y.qq.com", forHTTPHeaderField: "Referer")
+
+                let (lyricData, _) = try await URLSession.shared.data(for: request)
+                guard let lyricJson = try JSONSerialization.jsonObject(with: lyricData) as? [String: Any],
+                      let lyricStr = lyricJson["lyric"] as? String,
+                      let decodedData = Data(base64Encoded: lyricStr),
+                      let decodedStr = String(data: decodedData, encoding: .utf8) else {
+                    lyricsLog("QQMusic lyrics API: no lyric field for song \(candidate.id)")
+                    continue
+                }
+
+                let stripped = self.stripLRC(decodedStr)
+                let synced = self.parseLRC(decodedStr)
+
+                if index == 0 {
+                    bestLyrics = stripped
+                    bestSynced = synced
+                }
+
+                if !synced.isEmpty {
+                    bestLyrics = stripped
+                    bestSynced = synced
+                    lyricsLog("QQMusic found synced lyrics at candidate \(candidate.id) (\(candidate.name) - \(candidate.artist)): \(synced.count) lines")
+                    break
+                }
+
+                lyricsLog("QQMusic candidate \(candidate.id) has no synced lyrics, trying next")
             }
 
-            var request = URLRequest(url: lyricUrl)
-            request.setValue("https://y.qq.com", forHTTPHeaderField: "Referer")
-
-            let (lyricData, _) = try await URLSession.shared.data(for: request)
-            guard let lyricJson = try JSONSerialization.jsonObject(with: lyricData) as? [String: Any],
-                  let lyricStr = lyricJson["lyric"] as? String,
-                  let decodedData = Data(base64Encoded: lyricStr),
-                  let decodedStr = String(data: decodedData, encoding: .utf8) else {
-                self.currentLyrics = ""
-                self.isFetchingLyrics = false
-                return
-            }
-
-            self.currentLyrics = self.stripLRC(decodedStr)
+            self.currentLyrics = bestLyrics ?? ""
+            self.syncedLyrics = bestSynced
             self.isFetchingLyrics = false
-            self.syncedLyrics = self.parseLRC(decodedStr)
         } catch {
             self.currentLyrics = ""
             self.isFetchingLyrics = false
